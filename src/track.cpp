@@ -90,8 +90,10 @@ speed Track::maxRateOfDescent() const
     return ms;
 }
 
+
 Track::Track(std::string source, bool isFileName, metres granularity)
 {
+    // Setting main program variables
     using namespace std;
     using namespace XML::Parser;
     string mergedTrkSegs,trkseg,lat,lon,ele,name,time,temp,temp2;
@@ -100,42 +102,75 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     ostringstream oss,oss2;
     unsigned int num;
     this->granularity = granularity;
+
+    // Get source from file if content is missing
     if (isFileName) {
         ifstream fs(source);
-        if (! fs.good()) throw invalid_argument("Error opening source file '" + source + "'.");
+        if (! fs.good()){
+            throw invalid_argument("Error opening source file '" + source + "'.");
+        }
+
         oss << "Source file '" << source << "' opened okay." << endl;
+
         while (fs.good()) {
             getline(fs, temp);
             oss2 << temp << endl;
         }
         source = oss2.str();
     }
-    if (! elementExists(source,"gpx")) throw domain_error("No 'gpx' element.");
+
+
+    if (! elementExists(source,"gpx")){
+        throw domain_error("No 'gpx' element.");
+    }
+
     temp = getElement(source, "gpx");
     source = getElementContent(temp);
-    if (! elementExists(source,"trk")) throw domain_error("No 'trk' element.");
+
+    if (! elementExists(source,"trk")){
+        throw domain_error("No 'trk' element.");
+    }
+
     temp = getElement(source, "trk");
     source = getElementContent(temp);
+
     if (elementExists(source, "name")) {
         temp = getAndEraseElement(source, "name");
         routeName = getElementContent(temp);
         oss << "Track name is: " << routeName << endl;
     }
+
     while (elementExists(source, "trkseg")) {
         temp = getAndEraseElement(source, "trkseg");
         trkseg = getElementContent(temp);
         getAndEraseElement(trkseg, "name");
         mergedTrkSegs += trkseg;
     }
-    if (! mergedTrkSegs.empty()) source = mergedTrkSegs;
+
+    if (! mergedTrkSegs.empty()){
+        source = mergedTrkSegs;
+    }
     num = 0;
-    if (! elementExists(source,"trkpt")) throw domain_error("No 'trkpt' element.");
+
+    if (! elementExists(source,"trkpt")) {
+        throw domain_error("No 'trkpt' element.");
+    }
+
     temp = getAndEraseElement(source, "trkpt");
-    if (! attributeExists(temp,"lat")) throw domain_error("No 'lat' attribute.");
-    if (! attributeExists(temp,"lon")) throw domain_error("No 'lon' attribute.");
+    if (! attributeExists(temp,"lat")){
+        throw domain_error("No 'lat' attribute.");
+    }
+
+    if (! attributeExists(temp,"lon")){
+        throw domain_error("No 'lon' attribute.");
+    }
+
+
     lat = getElementAttribute(temp, "lat");
     lon = getElementAttribute(temp, "lon");
     temp = getElementContent(temp);
+
+
     if (elementExists(temp, "ele")) {
         temp2 = getElement(temp, "ele");
         ele = getElementContent(temp2);
@@ -149,61 +184,96 @@ Track::Track(std::string source, bool isFileName, metres granularity)
         oss << "Start position added: " << startPos.toString() << endl;
         ++num;
     }
+
+
+
     if (elementExists(temp,"name")) {
         temp2 = getElement(temp,"name");
         name = getElementContent(temp2);
     }
+
+
     positionNames.push_back(name);
     arrived.push_back(0);
     departed.push_back(0);
-    if (! elementExists(temp,"time")) throw domain_error("No 'time' element.");
+
+    if (! elementExists(temp,"time")){
+        throw domain_error("No 'time' element.");
+    }
+
     temp2 = getElement(temp,"time");
     time = getElementContent(temp2);
     startTime = currentTime = stringToTime(time);
     Position prevPos = positions.back(), nextPos = positions.back();
+
     while (elementExists(source, "trkpt")) {
         temp = getAndEraseElement(source, "trkpt");
-        if (! attributeExists(temp,"lat")) throw domain_error("No 'lat' attribute.");
-        if (! attributeExists(temp,"lon")) throw domain_error("No 'lon' attribute.");
+
+        if (! attributeExists(temp,"lat")){
+            throw domain_error("No 'lat' attribute.");
+        }
+
+        if (! attributeExists(temp,"lon")) {
+            throw domain_error("No 'lon' attribute.");
+        }
+
         lat = getElementAttribute(temp, "lat");
         lon = getElementAttribute(temp, "lon");
         temp = getElementContent(temp);
+
         if (elementExists(temp, "ele")) {
             temp2 = getElement(temp, "ele");
             ele = getElementContent(temp2);
             nextPos = Position(lat,lon,ele);
-        } else nextPos = Position(lat,lon);
-        if (! elementExists(temp,"time")) throw domain_error("No 'time' element.");
+        } else {
+            nextPos = Position(lat,lon);
+        }
+
+        if (! elementExists(temp,"time")){
+            throw domain_error("No 'time' element.");
+        }
+
         temp2 = getElement(temp,"time");
         time = getElementContent(temp2);
         currentTime = stringToTime(time);
+
         if (areSameLocation(nextPos, prevPos)) {
             // If we're still at the same location, then we haven't departed yet.
             departed.back() = currentTime - startTime;
             oss << "Position ignored: " << nextPos.toString() << endl;
         } else {
+
             if (elementExists(temp,"name")) {
                 temp2 = getElement(temp,"name");
                 name = getElementContent(temp2);
-            } else name = ""; // Fixed bug by adding this.
+            } else {
+                name = ""; // Fixed bug by adding this.
+            }
+
+
             positions.push_back(nextPos);
             positionNames.push_back(name);
             timeElapsed = currentTime - startTime;
             arrived.push_back(timeElapsed);
             departed.push_back(timeElapsed);
+
             oss << "Position added: " << nextPos.toString() << endl;
             oss << " at time: " << to_string(timeElapsed) << endl;
             ++num;
             prevPos = nextPos;
         }
     }
+
+
     oss << num << " positions added." << endl;
     routeLength = 0;
+
     for (unsigned int i = 1; i < num; ++i ) {
         deltaH = Position::distanceBetween(positions[i-1], positions[i]);
         deltaV = positions[i-1].elevation() - positions[i].elevation();
         routeLength += sqrt(pow(deltaH,2) + pow(deltaV,2));
     }
+
     report = oss.str();
 }
 
