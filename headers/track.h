@@ -60,6 +60,16 @@ namespace GPS
       std::vector<seconds> departed;
 
       static seconds stringToTime(const std::string &);
+
+  private:
+      /*
+       * Private functions that are going to be used internally
+       *
+       */
+      void chkElementExists(std::string, std::string);
+      void chkAttrExists(std::string, std::string);
+      void chkLatAndLong(std::string);
+      std::string getElement(std::string, std::string, bool);
   };
 }
 

@@ -90,13 +90,44 @@ speed Track::maxRateOfDescent() const
     return ms;
 }
 
+void Track::chkElementExists(std::string elemName , std::string fileContent) {
+    if (!XML::Parser::elementExists(fileContent, elemName)) {
+        throw std::domain_error("no '" + elemName + "' element.");
+    }
+}
+
+std::string Track::getElement(std::string fileContent, std::string elemName, bool erase)
+{
+    std::string elem;
+    if(erase)
+    {
+        XML::Parser::getAndEraseElement(fileContent, elemName);
+    }
+    else
+    {
+        elem = XML::Parser::getElement(fileContent, elemName);
+    }
+    return XML::Parser::getElementContent(elem);
+}
+void Track::chkAttrExists(std::string attr , std::string fileContent) {
+    if (! XML::Parser::attributeExists(fileContent,attr)){
+        throw std::domain_error("No '" + attr + "' attribute.");
+    }
+}
+
+void Track::chkLatAndLong(std::string fileContent)
+{
+    this->chkAttrExists("lat", fileContent);
+    this->chkAttrExists("lon", fileContent);
+}
+
 
 Track::Track(std::string source, bool isFileName, metres granularity)
 {
     // Setting main program variables
     using namespace std;
     using namespace XML::Parser;
-    string mergedTrkSegs,trkseg,lat,lon,ele,name,time,temp,temp2;
+    string mergedTrkSegs,trkseg,lat,lon,ele,name,time,temp,temp2,fileContent, elemContent;
     metres deltaH,deltaV;
     seconds startTime, currentTime, timeElapsed;
     ostringstream oss,oss2;
@@ -112,36 +143,35 @@ Track::Track(std::string source, bool isFileName, metres granularity)
 
         oss << "Source file '" << source << "' opened okay." << endl;
 
+        //Reads through file until empty
         while (fs.good()) {
             getline(fs, temp);
             oss2 << temp << endl;
         }
-        source = oss2.str();
+        // Create Different variable for source;
+        fileContent = oss2.str();
     }
 
+    // Nest through elements getting their values
 
-    if (! elementExists(source,"gpx")){
-        throw domain_error("No 'gpx' element.");
-    }
+    //  TODO: Probably create separate variables for different elements
+    //  Checking element exists and get its content
+    this->chkElementExists("gpx", fileContent);
+    fileContent = this->getElement(fileContent,"gpx",false);
 
-    temp = getElement(source, "gpx");
-    source = getElementContent(temp);
+    this->chkElementExists("trk", fileContent);
+    fileContent = this->getElement(fileContent, "trk", false);
 
-    if (! elementExists(source,"trk")){
-        throw domain_error("No 'trk' element.");
-    }
-
-    temp = getElement(source, "trk");
-    source = getElementContent(temp);
-
-    if (elementExists(source, "name")) {
-        temp = getAndEraseElement(source, "name");
+    // Remove name element and output value
+    if (elementExists(fileContent, "name")) {
+        temp = getAndEraseElement(fileContent, "name");
         routeName = getElementContent(temp);
         oss << "Track name is: " << routeName << endl;
     }
 
-    while (elementExists(source, "trkseg")) {
-        temp = getAndEraseElement(source, "trkseg");
+    // Iterate over segments of the track
+    while (elementExists(fileContent, "trkseg")) {
+        temp = getAndEraseElement(fileContent, "trkseg");
         trkseg = getElementContent(temp);
         getAndEraseElement(trkseg, "name");
         mergedTrkSegs += trkseg;
@@ -152,22 +182,16 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     }
     num = 0;
 
-    if (! elementExists(source,"trkpt")) {
-        throw domain_error("No 'trkpt' element.");
-    }
-
+    this->chkElementExists("trkpt", fileContent);
     temp = getAndEraseElement(source, "trkpt");
-    if (! attributeExists(temp,"lat")){
-        throw domain_error("No 'lat' attribute.");
-    }
 
-    if (! attributeExists(temp,"lon")){
-        throw domain_error("No 'lon' attribute.");
-    }
-
+    // Check latitude and longitude are present
+    this->chkLatAndLong(fileContent);
 
     lat = getElementAttribute(temp, "lat");
     lon = getElementAttribute(temp, "lon");
+
+
     temp = getElementContent(temp);
 
 
@@ -197,9 +221,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     arrived.push_back(0);
     departed.push_back(0);
 
-    if (! elementExists(temp,"time")){
-        throw domain_error("No 'time' element.");
-    }
+    chkElementExists("time", fileContent);
 
     temp2 = getElement(temp,"time");
     time = getElementContent(temp2);
@@ -209,13 +231,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     while (elementExists(source, "trkpt")) {
         temp = getAndEraseElement(source, "trkpt");
 
-        if (! attributeExists(temp,"lat")){
-            throw domain_error("No 'lat' attribute.");
-        }
-
-        if (! attributeExists(temp,"lon")) {
-            throw domain_error("No 'lon' attribute.");
-        }
+        this->chkLatAndLong(fileContent);
 
         lat = getElementAttribute(temp, "lat");
         lon = getElementAttribute(temp, "lon");
@@ -229,9 +245,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
             nextPos = Position(lat,lon);
         }
 
-        if (! elementExists(temp,"time")){
-            throw domain_error("No 'time' element.");
-        }
+        chkElementExists("time", fileContent);
 
         temp2 = getElement(temp,"time");
         time = getElementContent(temp2);
