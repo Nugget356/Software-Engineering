@@ -130,7 +130,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     string mergedTrkSegs,trkseg,lat,lon,ele,name,time,temp,temp2,fileContent, elemContent;
     metres deltaH,deltaV;
     seconds startTime, currentTime, timeElapsed;
-    ostringstream oss,oss2;
+    ostringstream logSS,oss2;
     unsigned int num;
     this->granularity = granularity;
 
@@ -141,11 +141,10 @@ Track::Track(std::string source, bool isFileName, metres granularity)
             throw invalid_argument("Error opening source file '" + source + "'.");
         }
 
-        oss << "Source file '" << source << "' opened okay." << endl;
+        logSS<< "Source file '" << source << "' opened okay." << endl;
 
         //Reads through file until empty
-        while (fs.good()) {
-            getline(fs, temp);
+        while (getline(fs, temp)) {
             oss2 << temp << endl;
         }
         // Create Different variable for source;
@@ -166,7 +165,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
     if (elementExists(fileContent, "name")) {
         temp = getAndEraseElement(fileContent, "name");
         routeName = getElementContent(temp);
-        oss << "Track name is: " << routeName << endl;
+        logSS<< "Track name is: " << routeName << endl;
     }
 
     // Iterate over segments of the track
@@ -200,12 +199,12 @@ Track::Track(std::string source, bool isFileName, metres granularity)
         ele = getElementContent(temp2);
         Position startPos = Position(lat,lon,ele);
         positions.push_back(startPos);
-        oss << "Start position added: " << startPos.toString() << endl;
+        logSS<< "Start position added: " << startPos.toString() << endl;
         ++num;
     } else {
         Position startPos = Position(lat,lon);
         positions.push_back(startPos);
-        oss << "Start position added: " << startPos.toString() << endl;
+        logSS<< "Start position added: " << startPos.toString() << endl;
         ++num;
     }
 
@@ -254,7 +253,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
         if (areSameLocation(nextPos, prevPos)) {
             // If we're still at the same location, then we haven't departed yet.
             departed.back() = currentTime - startTime;
-            oss << "Position ignored: " << nextPos.toString() << endl;
+            logSS<< "Position ignored: " << nextPos.toString() << endl;
         } else {
 
             if (elementExists(temp,"name")) {
@@ -271,15 +270,15 @@ Track::Track(std::string source, bool isFileName, metres granularity)
             arrived.push_back(timeElapsed);
             departed.push_back(timeElapsed);
 
-            oss << "Position added: " << nextPos.toString() << endl;
-            oss << " at time: " << to_string(timeElapsed) << endl;
+            logSS<< "Position added: " << nextPos.toString() << endl;
+            logSS<< " at time: " << to_string(timeElapsed) << endl;
             ++num;
             prevPos = nextPos;
         }
     }
 
 
-    oss << num << " positions added." << endl;
+    logSS<< num << " positions added." << endl;
     routeLength = 0;
 
     for (unsigned int i = 1; i < num; ++i ) {
@@ -288,7 +287,7 @@ Track::Track(std::string source, bool isFileName, metres granularity)
         routeLength += sqrt(pow(deltaH,2) + pow(deltaV,2));
     }
 
-    report = oss.str();
+    report = logSS.str();
 }
 
 void Track::setGranularity(metres granularity)

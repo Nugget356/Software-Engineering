@@ -260,16 +260,99 @@ std::string Route::buildReport() const
     return report;
 }
 
+std::string Route::getToData(std::string& data) {
+	//Iterate through all of the gpx rte and trkseg tags in the route data to get to the postions
+	if (!XML::Parser::elementExists(data, "gpx"))
+		throw domain_error("No 'gpx' element.");
+	data = XML::Parser::getElementContent(XML::Parser::getElement(data, "gpx"));
+
+	if (!XML::Parser::elementExists(data, "rte"))
+		throw domain_error("No 'rte' element.");
+	data = XML::Parser::getElementContent(XML::Parser::getElement(data, "rte"));
+	
+	while (XML::Parser::elementExists(data, "trkseg")) {
+		std::string trkseg = XML::Parser::getElementContent(XML::Parser::getAndEraseElement(data, "trkseg"));
+		XML::Parser::getAndEraseElement(trkseg, "name");
+			data += trkseg;
+	}
+	return data;
+}
+
+std::string Route::latAndLon(std::string data, std::string type) {
+	std::string newPos;
+	//Check for lat and lon errors 
+	if (!XML::Parser::elementExists(data, type))
+		throw std::domain_error("No '" + type + "' element.");
+
+	newPos = XML::Parser::getAndEraseElement(data, type);
+
+	if (!XML::Parser::attributeExists(newPos, "lat"))
+		throw std::domain_error("no 'lat' attribute.");
+	if (!XML::Parser::attributeExists(newPos, "lon"))
+		throw std::domain_error("no 'lon' attribute.");
+
+	return newPos;
+}
+
+void Route::pushPosition(std::string pos) {
+	positions.push_back(getPos(pos));
+
+	//Push the position as long as its able to get put in at the right address.
+	if (positions.size() > 1 && areSameLocation(positions.back(), positions.at(positions.size() - 2))) {
+		logSS << "Position ignored: " << positions.back().toString() << std::endl;
+		positions.pop_back();
+	}
+	else
+	{
+		positionNames.push_back(getName(pos));
+		logSS << "Position added: " << positions.back().toString() << std::endl;
+	}
+}
+
+std::string Route::getName(std::string pos) {
+	//Simple return the contents of the name tag thats inside the position
+	if (XML::Parser::elementExists(pos, "name")) {
+		return XML::Parser::getElementContent(XML::Parser::getElement(pos, "name"));
+	}
+	return "";
+}
+
+Position Route::getPos(std::string pos) {
+	std::string ele, lat, lon;
+	lat = XML::Parser::getElementAttribute(pos, "lat");
+	lon = XML::Parser::getElementAttribute(pos, "lon");
+	//Check to see if it contains ele in the position and if so add it to position
+	if (XML::Parser::elementExists(pos, "ele")) {
+		ele = XML::Parser::getElementContent(XML::Parser::getElement(pos, "ele"));
+		return Position(lat, lon, ele);
+	}
+	else
+		return Position(lat, lon);
+}
+
+void Route::setLength() {
+	metres deltaH, deltaV;
+	routeLength = 0;
+
+	//Calculate through every position the distance took and therfore calculate route length
+	for (unsigned int i = 1; i < positions.size(); ++i) {
+		deltaH = Position::distanceBetween(positions[i - 1], positions[i]);
+		deltaV = positions[i - 1].elevation() - positions[i].elevation();
+		routeLength += sqrt(pow(deltaH, 2) + pow(deltaV, 2));
+	}
+}
+
 Route::Route(std::string source, bool isFileName, metres granularity)
 {
     using namespace std;
     using namespace XML::Parser;
-    string lat,lon,ele,name,temp,temp2;
+    string ele,name,temp,temp2, elemData, recentPos;
     metres deltaH,deltaV;
-    ostringstream oss,oss2;
+    ostringstream oss2;
     unsigned int num;
     this->granularity = granularity;
 
+	//Read all the data from the file if it exists
     if (isFileName){
 
         ifstream fs(source);
@@ -279,11 +362,9 @@ Route::Route(std::string source, bool isFileName, metres granularity)
             throw invalid_argument("Error opening source file '" + source + "'.");
         }
 
-        oss << "Source file '" << source << "' opened okay." << endl;
+        logSS<< "Source file '" << source << "' opened okay." << endl;
 
-        while (fs.good()) {
-            getline(fs, temp);
-
+        while (getline(fs, temp)) {
             oss2 << temp << endl;
         }
 
@@ -291,141 +372,27 @@ Route::Route(std::string source, bool isFileName, metres granularity)
     }
 
 
-    if (! elementExists(source,"gpx"))
-    {
-        throw domain_error("No 'gpx' element.");
-    }
+	//itterates through the XML tags through gpx and rte
+	elemData = getToData(source);
 
-
-    temp = getElement(source, "gpx");
-    source = getElementContent(temp);
-
-    if (! elementExists(source,"rte"))
-    {
-        throw domain_error("No 'rte' element.");
-    }
-
-    temp = getElement(source, "rte");
-    source = getElementContent(temp);
-
+	//If there is a name tag in the data then set the route name
     if (elementExists(source, "name")) {
-        temp = getAndEraseElement(source, "name");
-        routeName = getElementContent(temp);
-
-        oss << "Route name is: " << routeName << endl;
+        routeName = XML::Parser::getElementContent(XML::Parser::getAndEraseElement(elemData, "name"));
+        logSS<< "Route name is: " << routeName << endl;
     }
 
+	//for each position get the lat and lon and ele if available and then set it in the positions vector
+	while (elementExists(elemData, "rtept")) {
+		recentPos = latAndLon(elemData, "rtept");
+		pushPosition(recentPos);
+	}
+	logSS << positions.size() << " positions added." << std::endl;
 
-    num = 0;
+	//get and set the routes length
+	setLength();
 
-    if (! elementExists(source,"rtept"))
-    {
-        throw domain_error("No 'rtept' element.");
-    }
-
-    temp = getAndEraseElement(source, "rtept");
-
-    if (! attributeExists(temp,"lat"))
-    {
-        throw domain_error("No 'lat' attribute.");
-    }
-
-    if (! attributeExists(temp,"lon"))
-    {
-        throw domain_error("No 'lon' attribute.");
-    }
-
-    lat = getElementAttribute(temp, "lat");
-    lon = getElementAttribute(temp, "lon");
-    temp = getElementContent(temp);
-
-    if (elementExists(temp, "ele")) {
-
-        temp2 = getElement(temp, "ele");
-        ele = getElementContent(temp2);
-        Position startPos = Position(lat,lon,ele);
-        positions.push_back(startPos);
-        oss << "Position added: " << startPos.toString() << endl;
-        ++num;
-    } else {
-        Position startPos = Position(lat,lon);
-        positions.push_back(startPos);
-        oss << "Position added: " << startPos.toString() << endl;
-        ++num;    
-    }
-
-    if (elementExists(temp,"name")) {
-        temp2 = getElement(temp,"name");
-        name = getElementContent(temp2);
-    }
-
-    positionNames.push_back(name);
-    Position prevPos = positions.back(), nextPos = positions.back();
-
-    while (elementExists(source, "rtept")) {
-        temp = getAndEraseElement(source, "rtept");
-
-        if (! attributeExists(temp,"lat"))
-        {
-            throw domain_error("No 'lat' attribute.");
-        }
-
-        if (! attributeExists(temp,"lon"))
-        {
-            throw domain_error("No 'lon' attribute.");
-        }
-
-        lat = getElementAttribute(temp, "lat");
-        lon = getElementAttribute(temp, "lon");
-        temp = getElementContent(temp);
-
-        if (elementExists(temp, "ele")) {
-            temp2 = getElement(temp, "ele");
-            ele = getElementContent(temp2);
-            nextPos = Position(lat,lon,ele);
-        } else {
-            nextPos = Position(lat,lon);
-        }
-
-
-        if (areSameLocation(nextPos, prevPos))
-        {
-            oss << "Position ignored: " << nextPos.toString() << endl;
-        } else {
-
-            if (elementExists(temp,"name")) {
-
-                temp2 = getElement(temp,"name");
-                name = getElementContent(temp2);
-
-            } else {
-                // Fixed bug by adding this.
-                name = "";
-            }
-
-
-            positions.push_back(nextPos);
-            positionNames.push_back(name);
-
-            oss << "Position added: " << nextPos.toString() << endl;
-
-            ++num;
-
-            prevPos = nextPos;
-        }
-    }
-
-    oss << num << " positions added." << endl;
-
-    routeLength = 0;
-
-    for (unsigned int i = 1; i < num; ++i ) {
-        deltaH = Position::distanceBetween(positions[i-1], positions[i]);
-        deltaV = positions[i-1].elevation() - positions[i].elevation();
-        routeLength += sqrt(pow(deltaH,2) + pow(deltaV,2));
-    }
-
-    report = oss.str();
+	//all of the logs that have been collected then get put into a simple report file
+    report = logSS.str();
 }
 
 void Route::setGranularity(metres granularity)

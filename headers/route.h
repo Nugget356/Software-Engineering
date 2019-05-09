@@ -98,16 +98,25 @@ namespace GPS
       metres granularity;
 
       metres routeLength;
-      std::string routeName;
+	  std::string routeName;
       std::vector<Position> positions;
       std::vector<std::string> positionNames;
-
       std::string report;
 
       /* Two Positions are considered to be the same location is they are less than
        * "granularity" metres apart (horizontally).
        */
       bool areSameLocation(const Position &, const Position &) const;
+  
+	private:
+
+		std::ostringstream logSS;
+		std::string getToData(std::string, std::string&);
+		std::string latAndLon(std::string, std::string);
+		void pushPosition(std::string);
+		Position getPos(std::string);
+		std::string getName(std::string);
+		void setLength();
   };
 }
 
